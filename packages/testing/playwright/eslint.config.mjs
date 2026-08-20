@@ -5,7 +5,16 @@ export default [
 	...baseConfig,
 	playwrightPlugin.configs['flat/recommended'],
 	{
-		ignores: ['playwright-report/**/*', 'ms-playwright-cache/**/*'],
+		ignores: [
+			'playwright-report/**/*',
+			'ms-playwright-cache/**/*',
+			// Downloaded browser bundles. Gitignored, but flat config does not read
+			// .gitignore, and Chromium ships loose .js files under resources/.
+			'.playwright-browsers/**/*',
+			'coverage/**/*',
+			'scripts/**/*',
+			'janitor.config.mjs',
+		],
 	},
 	{
 		rules: {

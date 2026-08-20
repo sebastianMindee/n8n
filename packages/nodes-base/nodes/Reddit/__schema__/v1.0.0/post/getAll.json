@@ -21,10 +21,16 @@
             "items": {
                 "type": "object",
                 "properties": {
+                    "a": {
+                        "type": "string"
+                    },
                     "e": {
                         "type": "string"
                     },
                     "t": {
+                        "type": "string"
+                    },
+                    "u": {
                         "type": "string"
                     }
                 }
@@ -62,6 +68,9 @@
         },
         "clicked": {
             "type": "boolean"
+        },
+        "content_categories": {
+            "type": "null"
         },
         "contest_mode": {
             "type": "boolean"
@@ -308,5 +317,5 @@
             "type": "boolean"
         }
     },
-    "version": 2
+    "version": 6
 }

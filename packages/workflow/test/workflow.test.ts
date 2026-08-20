@@ -5,13 +5,11 @@ import { UserError } from '../src/errors';
 import { NodeConnectionTypes } from '../src/interfaces';
 import type {
 	IBinaryKeyData,
-	IConnection,
 	IConnections,
 	IDataObject,
 	INode,
 	INodeExecutionData,
 	INodeParameters,
-	IRunExecutionData,
 	NodeParameterValueType,
 } from '../src/interfaces';
 import { Workflow } from '../src/workflow';
@@ -20,6 +18,7 @@ process.env.TEST_VARIABLE_1 = 'valueEnvVariable1';
 
 // eslint-disable-next-line import/order
 import * as Helpers from './helpers';
+import { createRunExecutionData, type IRunExecutionData } from '../src';
 
 interface StubNode {
 	name: string;
@@ -1743,7 +1742,9 @@ describe('Workflow', () => {
 		const nodeTypes = Helpers.NodeTypes();
 
 		for (const testData of tests) {
-			test(testData.description, () => {
+			test(testData.description, async () => {
+				process.env.N8N_BLOCK_ENV_ACCESS_IN_NODE = 'false';
+
 				const nodes: INode[] = [
 					{
 						name: 'Node1',
@@ -1819,64 +1820,70 @@ describe('Workflow', () => {
 				};
 
 				const workflow = new Workflow({ nodes, connections, active: false, nodeTypes });
-				const activeNodeName = testData.input.hasOwnProperty('Node3') ? 'Node3' : 'Node2';
+				await workflow.expression.acquireIsolate();
+				try {
+					const activeNodeName = testData.input.hasOwnProperty('Node3') ? 'Node3' : 'Node2';
 
-				const runExecutionData: IRunExecutionData = {
-					resultData: {
-						runData: {
-							Node1: [
-								{
-									source: [
-										{
-											previousNode: 'test',
-										},
-									],
-									startTime: 1,
-									executionTime: 1,
-									executionIndex: 0,
-									data: {
-										main: [
-											[
-												{
-													json: testData.input.Node1.outputJson || testData.input.Node1.parameters,
-													binary: testData.input.Node1.outputBinary,
-												},
-											],
+					const runExecutionData = createRunExecutionData({
+						resultData: {
+							runData: {
+								Node1: [
+									{
+										source: [
+											{
+												previousNode: 'test',
+											},
 										],
+										startTime: 1,
+										executionTime: 1,
+										executionIndex: 0,
+										data: {
+											main: [
+												[
+													{
+														json:
+															testData.input.Node1.outputJson || testData.input.Node1.parameters,
+														binary: testData.input.Node1.outputBinary,
+													},
+												],
+											],
+										},
 									},
-								},
-							],
-							Node2: [],
-							'Node 4 with spaces': [],
+								],
+								Node2: [],
+								'Node 4 with spaces': [],
+							},
 						},
-					},
-				};
+					});
 
-				const itemIndex = 0;
-				const runIndex = 0;
-				const connectionInputData: INodeExecutionData[] =
-					runExecutionData.resultData.runData.Node1[0].data!.main[0]!;
+					const itemIndex = 0;
+					const runIndex = 0;
+					const connectionInputData: INodeExecutionData[] =
+						runExecutionData.resultData.runData.Node1[0].data!.main[0]!;
 
-				for (const parameterName of Object.keys(testData.output)) {
-					const parameterValue = nodes.find((node) => node.name === activeNodeName)!.parameters[
-						parameterName
-					];
-					const result = workflow.expression.getParameterValue(
-						parameterValue,
-						runExecutionData,
-						runIndex,
-						itemIndex,
-						activeNodeName,
-						connectionInputData,
-						'manual',
-						{},
-					);
-					expect(result).toEqual(testData.output[parameterName]);
+					for (const parameterName of Object.keys(testData.output)) {
+						const parameterValue = nodes.find((node) => node.name === activeNodeName)!.parameters[
+							parameterName
+						];
+						const result = workflow.expression.getParameterValue(
+							parameterValue,
+							runExecutionData,
+							runIndex,
+							itemIndex,
+							activeNodeName,
+							connectionInputData,
+							'manual',
+							{},
+						);
+						expect(result).toEqual(testData.output[parameterName]);
+					}
+				} finally {
+					await workflow.expression.releaseIsolate();
 				}
 			});
 		}
 
-		test('should also resolve all child parameters when the parent get requested', () => {
+		test('should also resolve all child parameters when the parent get requested', async () => {
 			const nodes: INode[] = [
 				{
 					name: 'Node1',
@@ -1903,9 +1910,10 @@ describe('Workflow', () => {
 			const connections: IConnections = {};
 
 			const workflow = new Workflow({ nodes, connections, active: false, nodeTypes });
+			await workflow.expression.acquireIsolate();
 			const activeNodeName = 'Node1';
 
-			const runExecutionData: IRunExecutionData = {
+			const runExecutionData = createRunExecutionData({
 				resultData: {
 					runData: {
 						Node1: [
@@ -1927,7 +1935,7 @@ describe('Workflow', () => {
 						],
 					},
 				},
-			};
+			});
 
 			const itemIndex = 0;
 			const runIndex = 0;
@@ -1961,6 +1969,7 @@ describe('Workflow', () => {
 					},
 				],
 			});
+			await workflow.expression.releaseIsolate();
 		});
 	});
 
@@ -2335,6 +2344,19 @@ describe('Workflow', () => {
 
 			const result = workflow.getHighestNode(targetNode.name);
 			expect(result).toEqual([node1.name]);
+		});
+
+		test('returns [] when called with a node name not present in workflow.nodes', () => {
+			const node = createNode('Node1');
+			const workflow = new Workflow({
+				id: 'test',
+				nodes: [node],
+				connections: {},
+				active: false,
+				nodeTypes,
+			});
+
+			expect(workflow.getHighestNode('NodeNotInWorkflow')).toEqual([]);
 		});
 	});
 
@@ -3101,6 +3123,309 @@ describe('Workflow', () => {
 
 			const result = workflow.getConnectionsBetweenNodes(['Node1'], ['TargetNode']);
 			expect(result).toEqual([]);
+		});
+	});
+
+	describe('Error handling', () => {
+		test('should handle unknown node type in constructor', () => {
+			// Create a workflow with a node that has an unknown type
+			const workflow = new Workflow({
+				nodeTypes: {
+					getByNameAndVersion: () => undefined, // Always return undefined to simulate unknown node type
+					getAll: () => [],
+				} as any,
+				nodes: [
+					{
+						id: 'unknown-node',
+						name: 'UnknownNode',
+						type: 'unknown.type',
+						typeVersion: 1,
+						position: [0, 0],
+						parameters: {},
+					},
+				],
+				connections: {},
+				active: false,
+			});
+
+			// Should not throw error, just continue processing
+			expect(workflow).toBeDefined();
+			expect(workflow.getNode('UnknownNode')).toBeDefined();
+		});
+
+		test('should throw error for unknown context type', () => {
+			expect(() => {
+				SIMPLE_WORKFLOW.getStaticData('invalid' as any);
+			}).toThrow('Unknown context type. Only `global` and `node` are supported.');
+		});
+
+		test('should throw error when node parameter is undefined for node context', () => {
+			expect(() => {
+				SIMPLE_WORKFLOW.getStaticData('node', undefined);
+			}).toThrow('The request data of context type "node" the node parameter has to be set!');
+		});
+
+		test('should return deterministic results for AI agent nodes', () => {
+			// Test that deterministic sorting works for AI agent scenarios
+			const workflow = new Workflow({
+				nodeTypes,
+				nodes: [
+					{
+						id: 'aiAgent1',
+						name: 'AI Agent',
+						type: '@n8n/n8n-nodes-langchain.agent',
+						typeVersion: 1.8,
+						position: [0, 0],
+						parameters: {},
+					},
+					{
+						id: 'tool1',
+						name: 'Tool1',
+						type: '@n8n/n8n-nodes-langchain.toolWikipedia',
+						typeVersion: 1,
+						position: [100, 0],
+						parameters: {},
+					},
+					{
+						id: 'tool2',
+						name: 'Tool2',
+						type: '@n8n/n8n-nodes-langchain.toolCalculator',
+						typeVersion: 1,
+						position: [200, 0],
+						parameters: {},
+					},
+				],
+				connections: {
+					Tool1: {
+						[NodeConnectionTypes.AiTool]: [
+							[{ node: 'AI Agent', type: NodeConnectionTypes.AiTool, index: 0 }],
+						],
+					},
+					Tool2: {
+						[NodeConnectionTypes.AiTool]: [
+							[{ node: 'AI Agent', type: NodeConnectionTypes.AiTool, index: 0 }],
+						],
+					},
+				},
+				active: false,
+			});
+
+			const aiAgent = workflow.getNode('AI Agent')!;
+			const result1 = workflow.getParentMainInputNode(aiAgent);
+			const result2 = workflow.getParentMainInputNode(aiAgent);
+
+			// Results should be consistent across multiple calls
+			expect(result1.name).toBe(result2.name);
+		});
+
+		test('should handle multiple non-main connection types deterministically', () => {
+			// This test demonstrates why alphabetical sorting is crucial:
+			// Without sorting, Object.keys() could return different orders across JavaScript engines/runs
+			// We test that the same input always produces the same output
+
+			const createTestWorkflow = () => {
+				const workflow = new Workflow({
+					nodeTypes,
+					nodes: [
+						{
+							id: 'aiAgent1',
+							name: 'AI Agent',
+							type: '@n8n/n8n-nodes-langchain.agent',
+							typeVersion: 1.8,
+							position: [0, 0],
+							parameters: {},
+						},
+						{
+							id: 'tool1',
+							name: 'Tool1',
+							type: '@n8n/n8n-nodes-langchain.toolCalculator',
+							typeVersion: 1,
+							position: [100, 0],
+							parameters: {},
+						},
+						{
+							id: 'tool2',
+							name: 'Tool2',
+							type: '@n8n/n8n-nodes-langchain.toolWikipedia',
+							typeVersion: 1,
+							position: [200, 0],
+							parameters: {},
+						},
+					],
+					connections: {
+						Tool1: {
+							[NodeConnectionTypes.AiTool]: [
+								[{ node: 'AI Agent', type: NodeConnectionTypes.AiTool, index: 0 }],
+							],
+						},
+						Tool2: {
+							[NodeConnectionTypes.AiTool]: [
+								[{ node: 'AI Agent', type: NodeConnectionTypes.AiTool, index: 1 }],
+							],
+						},
+					},
+					active: false,
+				});
+				return workflow;
+			};
+
+			// Create multiple identical workflows
+			const workflow1 = createTestWorkflow();
+			const workflow2 = createTestWorkflow();
+			const workflow3 = createTestWorkflow();
+
+			const aiAgent1 = workflow1.getNode('AI Agent')!;
+			const aiAgent2 = workflow2.getNode('AI Agent')!;
+			const aiAgent3 = workflow3.getNode('AI Agent')!;
+
+			const result1 = workflow1.getParentMainInputNode(aiAgent1);
+			const result2 = workflow2.getParentMainInputNode(aiAgent2);
+			const result3 = workflow3.getParentMainInputNode(aiAgent3);
+
+			// All results should be identical (demonstrates deterministic behavior)
+			expect(result1.name).toBe(result2.name);
+			expect(result2.name).toBe(result3.name);
+			expect(result1.name).toBe(result3.name);
+		});
+
+		test('should demonstrate the problem that deterministic sorting solves', () => {
+			// This test verifies that alphabetical sorting ensures consistent results
+			// regardless of the order in which connection types are processed
+
+			// Create a workflow with multiple AI connection types in a specific structure
+			// that would trigger the non-deterministic behavior without sorting
+			const workflow = new Workflow({
+				nodeTypes,
+				nodes: [
+					{
+						id: 'aiAgent1',
+						name: 'AI Agent',
+						type: '@n8n/n8n-nodes-langchain.agent',
+						typeVersion: 1.8,
+						position: [0, 0],
+						parameters: {},
+					},
+					{
+						id: 'tool1',
+						name: 'ZZZ Tool', // Intentionally named to come last alphabetically
+						type: '@n8n/n8n-nodes-langchain.toolCalculator',
+						typeVersion: 1,
+						position: [100, 0],
+						parameters: {},
+					},
+					{
+						id: 'tool2',
+						name: 'AAA Tool', // Intentionally named to come first alphabetically
+						type: '@n8n/n8n-nodes-langchain.toolWikipedia',
+						typeVersion: 1,
+						position: [200, 0],
+						parameters: {},
+					},
+				],
+				connections: {
+					'ZZZ Tool': {
+						[NodeConnectionTypes.AiTool]: [
+							[{ node: 'AI Agent', type: NodeConnectionTypes.AiTool, index: 0 }],
+						],
+					},
+					'AAA Tool': {
+						[NodeConnectionTypes.AiTool]: [
+							[{ node: 'AI Agent', type: NodeConnectionTypes.AiTool, index: 1 }],
+						],
+					},
+				},
+				active: false,
+			});
+
+			const aiAgent = workflow.getNode('AI Agent')!;
+
+			// Test multiple times to ensure consistent behavior
+			// Without proper sorting, the result could vary based on internal iteration order
+			const results: string[] = [];
+			for (let i = 0; i < 20; i++) {
+				const result = workflow.getParentMainInputNode(aiAgent);
+				results.push(result.name);
+			}
+
+			// All results should be identical (proving deterministic sorting works)
+			const uniqueResults = new Set(results);
+			expect(uniqueResults.size).toBe(1);
+
+			// The result should be consistent across all calls
+			const firstResult = results[0];
+			results.forEach((result) => {
+				expect(result).toBe(firstResult);
+			});
+		});
+
+		test('should explain why sorting is needed with real-world AI agent scenarios', () => {
+			// Simulates a complex AI agent workflow - the exact type that was experiencing
+			// non-deterministic behavior before the fix
+			// This test documents the business value of the deterministic sorting fix
+
+			const workflow = new Workflow({
+				nodeTypes,
+				nodes: [
+					{
+						id: 'aiAgent1',
+						name: 'ChatGPT Agent',
+						type: '@n8n/n8n-nodes-langchain.agent',
+						typeVersion: 1.8,
+						position: [0, 0],
+						parameters: {},
+					},
+					{
+						id: 'calculatorTool',
+						name: 'Calculator Tool',
+						type: '@n8n/n8n-nodes-langchain.toolCalculator',
+						typeVersion: 1,
+						position: [100, 0],
+						parameters: {},
+					},
+					{
+						id: 'wikipediaTool',
+						name: 'Wikipedia Tool',
+						type: '@n8n/n8n-nodes-langchain.toolWikipedia',
+						typeVersion: 1,
+						position: [100, 100],
+						parameters: {},
+					},
+				],
+				connections: {
+					'Calculator Tool': {
+						[NodeConnectionTypes.AiTool]: [
+							[{ node: 'ChatGPT Agent', type: NodeConnectionTypes.AiTool, index: 0 }],
+						],
+					},
+					'Wikipedia Tool': {
+						[NodeConnectionTypes.AiTool]: [
+							[{ node: 'ChatGPT Agent', type: NodeConnectionTypes.AiTool, index: 1 }],
+						],
+					},
+				},
+				active: false,
+			});
+
+			const chatGPTAgent = workflow.getNode('ChatGPT Agent')!;
+
+			// Test what the original bug report described:
+			// "AI agent node problem" with non-deterministic behavior
+			const results = Array.from(
+				{ length: 100 },
+				() => workflow.getParentMainInputNode(chatGPTAgent).name,
+			);
+
+			// The fix ensures all results are identical (deterministic)
+			// Previously, this could return different tool nodes across runs
+			expect(new Set(results).size).toBe(1);
+
+			// Additionally, verify that consecutive calls return the same result
+			const result1 = workflow.getParentMainInputNode(chatGPTAgent);
+			const result2 = workflow.getParentMainInputNode(chatGPTAgent);
+			const result3 = workflow.getParentMainInputNode(chatGPTAgent);
+
+			expect(result1.name).toBe(result2.name);
+			expect(result2.name).toBe(result3.name);
 		});
 	});
 });

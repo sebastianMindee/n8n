@@ -1,3 +1,10 @@
+// NOTE: This file is intentionally mirrored in @n8n/expression-runtime/src/extensions/
+// for use inside the isolated VM. Changes here must be reflected there and vice versa.
+// TODO: Eliminate the duplication. The blocker is that @n8n/expression-runtime is
+// Vite-stubbed for browser builds (to exclude isolated-vm), which prevents n8n-workflow
+// from importing these extension utilities directly from the runtime package. Fix by
+// splitting @n8n/expression-runtime into a browser-safe extensions subpath (not stubbed)
+// and a node-only VM entry (stubbed).
 import isEqual from 'lodash/isEqual';
 import uniqWith from 'lodash/uniqWith';
 
@@ -21,6 +28,10 @@ function isNotEmpty(value: unknown[]): boolean {
 
 function last(value: unknown[]): unknown {
 	return value[value.length - 1];
+}
+
+function reverse(value: unknown[]): unknown[] {
+	return [...value].reverse();
 }
 
 function pluck(value: unknown[], extraArgs: unknown[]): unknown[] {
@@ -257,6 +268,31 @@ function merge(value: unknown[], extraArgs: unknown[][]): unknown {
 	return merged;
 }
 
+function mergeIntoObject(value: unknown[], extraArgs: unknown[][]): unknown {
+	const [others] = extraArgs;
+
+	if (!Array.isArray(others)) {
+		throw new ExpressionExtensionError(
+			'mergeIntoObject(): expected array arg, e.g. .mergeIntoObject([{ id: 1, otherValue: 3 }])',
+		);
+	}
+	const listLength = value.length > others.length ? value.length : others.length;
+	let merged = {};
+	for (let i = 0; i < listLength; i++) {
+		const baseIsObject = value[i] !== null && typeof value[i] === 'object';
+		const otherIsObject = others[i] !== null && typeof others[i] === 'object';
+		if (baseIsObject) {
+			merged = Object.assign(
+				merged,
+				mergeObjects(value[i] as Record<string, unknown>, otherIsObject ? [others[i]] : []),
+			);
+		} else if (otherIsObject) {
+			merged = Object.assign(merged, others[i] as Record<string, unknown>);
+		}
+	}
+	return merged;
+}
+
 function union(value: unknown[], extraArgs: unknown[][]): unknown[] {
 	const [others] = extraArgs;
 	if (!Array.isArray(others)) {
@@ -334,6 +370,7 @@ export function toDateTime() {
 
 average.doc = {
 	name: 'average',
+	aliases: ['mean'],
 	description:
 		'Returns the average of the numbers in the array. Throws an error if there are any non-numbers.',
 	examples: [{ example: '[12, 1, 5].average()', evaluated: '6' }],
@@ -343,6 +380,7 @@ average.doc = {
 
 compact.doc = {
 	name: 'compact',
+	aliases: ['removeEmpty'],
 	description:
 		'Removes any empty values from the array. <code>null</code>, <code>""</code> and <code>undefined</code> count as empty.',
 	examples: [{ example: '[2, null, 1, ""].compact()', evaluated: '[2, 1]' }],
@@ -374,6 +412,7 @@ isNotEmpty.doc = {
 
 first.doc = {
 	name: 'first',
+	aliases: ['head'],
 	description: 'Returns the first element of the array',
 	examples: [{ example: "['quick', 'brown', 'fox'].first()", evaluated: "'quick'" }],
 	returnType: 'any',
@@ -382,6 +421,7 @@ first.doc = {
 
 last.doc = {
 	name: 'last',
+	aliases: ['tail'],
 	description: 'Returns the last element of the array',
 	examples: [{ example: "['quick', 'brown', 'fox'].last()", evaluated: "'fox'" }],
 	returnType: 'any',
@@ -481,6 +521,7 @@ merge.doc = {
 	name: 'merge',
 	description:
 		'Merges two Object-arrays into one object by merging the key-value pairs of each element.',
+	hidden: true,
 	examples: [
 		{
 			example:
@@ -498,6 +539,29 @@ merge.doc = {
 		},
 	],
 	docURL: 'https://docs.n8n.io/code/builtin/data-transformation-functions/arrays/#array-merge',
+};
+
+mergeIntoObject.doc = {
+	name: 'mergeIntoObject',
+	description:
+		'Merges two Object-arrays into one object by merging the key-value pairs of each element. If the arrays have different lengths, elements from the longer array are kept.',
+	examples: [
+		{
+			example: "[{ name: 'Nathan' }, { age: 42 }].mergeIntoObject([{ city: 'Berlin' }])",
+			evaluated: "{ name: 'Nathan', age: 42, city: 'Berlin' }",
+		},
+	],
+	returnType: 'Object',
+	args: [
+		{
+			name: 'otherArray',
+			optional: false,
+			description: 'The array to merge into the base array',
+			type: 'Array',
+		},
+	],
+	docURL:
+		'https://docs.n8n.io/code/builtin/data-transformation-functions/arrays/#array-mergeintoobject',
 };
 
 pluck.doc = {
@@ -640,6 +704,7 @@ toJsonString.doc = {
 
 append.doc = {
 	name: 'append',
+	aliases: ['push'],
 	description:
 		'Adds new elements to the end of the array. Similar to <code>push()</code>, but returns the modified array. Consider using spread syntax instead (see examples).',
 	examples: [
@@ -674,6 +739,7 @@ export const arrayExtensions: ExtensionMap = {
 		unique,
 		first,
 		last,
+		reverse,
 		pluck,
 		randomItem,
 		sum,
@@ -687,6 +753,7 @@ export const arrayExtensions: ExtensionMap = {
 		chunk,
 		renameKeys,
 		merge,
+		mergeIntoObject,
 		union,
 		difference,
 		intersection,

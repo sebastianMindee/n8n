@@ -1,9 +1,9 @@
-import type { StoryFn } from '@storybook/vue3';
+import type { StoryFn } from '@storybook/vue3-vite';
 
 import AssistantText from './AssistantText.vue';
 
 export default {
-	title: 'Assistant/AssistantText',
+	title: 'Areas/Assistant/AssistantText',
 	component: AssistantText,
 	argTypes: {},
 };

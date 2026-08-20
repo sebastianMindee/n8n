@@ -1,9 +1,9 @@
-import type { StoryFn } from '@storybook/vue3';
+import type { StoryFn } from '@storybook/vue3-vite';
 
 import CodeDiff from './CodeDiff.vue';
 
 export default {
-	title: 'Assistant/CodeDiff',
+	title: 'Areas/Assistant/CodeDiff',
 	component: CodeDiff,
 	argTypes: {},
 };

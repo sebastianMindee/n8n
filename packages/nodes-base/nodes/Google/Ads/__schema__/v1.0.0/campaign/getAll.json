@@ -7,6 +7,9 @@
         "amountMicros": {
             "type": "string"
         },
+        "averageCost": {
+            "type": "number"
+        },
         "averageCpm": {
             "type": "number"
         },
@@ -40,9 +43,9 @@
         "status": {
             "type": "string"
         },
-        "videoViews": {
+        "videoTrueviewViews": {
             "type": "string"
         }
     },
-    "version": 3
+    "version": 7
 }

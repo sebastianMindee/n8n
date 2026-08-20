@@ -1,3 +1,4 @@
+import { LicenseState } from '@n8n/backend-common';
 import {
 	linkUserToProject,
 	createTeamProject,
@@ -26,6 +27,7 @@ describe('ProjectService', () => {
 
 		const license: LicenseMocker = new LicenseMocker();
 		license.mock(Container.get(License));
+		license.mockLicenseState(Container.get(LicenseState));
 		license.enable('feat:projectRole:editor');
 	});
 

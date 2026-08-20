@@ -1,6 +1,6 @@
 import { ALL_SCOPES } from '@n8n/permissions';
 
-import { createRoleDtoSchema } from '../create-role.dto';
+import { CreateRoleDto } from '../create-role.dto';
 
 describe('createRoleDtoSchema', () => {
 	describe('Valid requests', () => {
@@ -36,22 +36,6 @@ describe('createRoleDtoSchema', () => {
 						'workflow:create',
 						'workflow:read',
 					],
-				},
-			},
-			{
-				name: 'with wildcard scopes',
-				request: {
-					displayName: 'Admin Role',
-					roleType: 'project',
-					scopes: ['project:*', 'workflow:*'],
-				},
-			},
-			{
-				name: 'with global wildcard scope',
-				request: {
-					displayName: 'Super Admin',
-					roleType: 'project',
-					scopes: ['*'],
 				},
 			},
 			{
@@ -120,7 +104,7 @@ describe('createRoleDtoSchema', () => {
 				},
 			},
 		])('should validate $name', ({ request }) => {
-			const result = createRoleDtoSchema.safeParse(request);
+			const result = CreateRoleDto.safeParse(request);
 			expect(result.success).toBe(true);
 		});
 	});
@@ -244,6 +228,24 @@ describe('createRoleDtoSchema', () => {
 				expectedErrorPath: ['scopes'],
 			},
 			{
+				name: 'resource wildcard scope',
+				request: {
+					displayName: 'Admin Role',
+					roleType: 'project',
+					scopes: ['project:*', 'workflow:*'],
+				},
+				expectedErrorPath: ['scopes', 0],
+			},
+			{
+				name: 'global wildcard scope',
+				request: {
+					displayName: 'Super Admin',
+					roleType: 'project',
+					scopes: ['*'],
+				},
+				expectedErrorPath: ['scopes', 0],
+			},
+			{
 				name: 'invalid scope in array',
 				request: {
 					displayName: 'Test Role',
@@ -307,7 +309,7 @@ describe('createRoleDtoSchema', () => {
 				expectedErrorPath: ['scopes', 1],
 			},
 		])('should fail validation for $name', ({ request, expectedErrorPath }) => {
-			const result = createRoleDtoSchema.safeParse(request);
+			const result = CreateRoleDto.safeParse(request);
 
 			expect(result.success).toBe(false);
 
@@ -328,7 +330,7 @@ describe('createRoleDtoSchema', () => {
 					scopes: [scope],
 				};
 
-				const result = createRoleDtoSchema.safeParse(request);
+				const result = CreateRoleDto.safeParse(request);
 				expect(result.success).toBe(true);
 			}
 		});
@@ -354,7 +356,7 @@ describe('createRoleDtoSchema', () => {
 					scopes: [scope],
 				};
 
-				const result = createRoleDtoSchema.safeParse(request);
+				const result = CreateRoleDto.safeParse(request);
 				expect(result.success).toBe(false);
 			}
 		});

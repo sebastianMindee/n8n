@@ -1,10 +1,10 @@
-import { action } from '@storybook/addon-actions';
-import type { StoryFn } from '@storybook/vue3';
+import type { StoryFn } from '@storybook/vue3-vite';
+import { action } from 'storybook/actions';
 
 import InlineAskAssistantButton from './InlineAskAssistantButton.vue';
 
 export default {
-	title: 'Assistant/InlineAskAssistantButton',
+	title: 'Areas/Assistant/InlineAskAssistantButton',
 	component: InlineAskAssistantButton,
 	argTypes: {},
 };

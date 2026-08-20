@@ -1,6 +1,6 @@
 import { ALL_SCOPES } from '@n8n/permissions';
 
-import { updateRoleDtoSchema } from '../update-role.dto';
+import { UpdateRoleDto } from '../update-role.dto';
 
 describe('updateRoleDtoSchema', () => {
 	describe('Valid requests', () => {
@@ -38,7 +38,7 @@ describe('updateRoleDtoSchema', () => {
 				name: 'displayName and scopes',
 				request: {
 					displayName: 'Enhanced Role',
-					scopes: ['project:*', 'workflow:read'],
+					scopes: ['project:read', 'workflow:read'],
 				},
 			},
 			{
@@ -99,18 +99,6 @@ describe('updateRoleDtoSchema', () => {
 				},
 			},
 			{
-				name: 'wildcard scopes',
-				request: {
-					scopes: ['project:*', 'workflow:*'],
-				},
-			},
-			{
-				name: 'global wildcard scope',
-				request: {
-					scopes: ['*'],
-				},
-			},
-			{
 				name: 'empty scopes array',
 				request: {
 					scopes: [],
@@ -144,7 +132,7 @@ describe('updateRoleDtoSchema', () => {
 				},
 			},
 		])('should validate $name', ({ request }) => {
-			const result = updateRoleDtoSchema.safeParse(request);
+			const result = UpdateRoleDto.safeParse(request);
 			expect(result.success).toBe(true);
 		});
 	});
@@ -264,6 +252,20 @@ describe('updateRoleDtoSchema', () => {
 				expectedErrorPath: ['scopes'],
 			},
 			{
+				name: 'resource wildcard scope',
+				request: {
+					scopes: ['project:*', 'workflow:*'],
+				},
+				expectedErrorPath: ['scopes', 0],
+			},
+			{
+				name: 'global wildcard scope',
+				request: {
+					scopes: ['*'],
+				},
+				expectedErrorPath: ['scopes', 0],
+			},
+			{
 				name: 'invalid scope in array',
 				request: {
 					scopes: ['project:read', 'invalid:scope'],
@@ -327,7 +329,7 @@ describe('updateRoleDtoSchema', () => {
 				expectedErrorPath: ['scopes', 1],
 			},
 		])('should fail validation for $name', ({ request, expectedErrorPath }) => {
-			const result = updateRoleDtoSchema.safeParse(request);
+			const result = UpdateRoleDto.safeParse(request);
 
 			expect(result.success).toBe(false);
 
@@ -346,7 +348,7 @@ describe('updateRoleDtoSchema', () => {
 					scopes: [scope],
 				};
 
-				const result = updateRoleDtoSchema.safeParse(request);
+				const result = UpdateRoleDto.safeParse(request);
 				expect(result.success).toBe(true);
 			}
 		});
@@ -370,7 +372,7 @@ describe('updateRoleDtoSchema', () => {
 					scopes: [scope],
 				};
 
-				const result = updateRoleDtoSchema.safeParse(request);
+				const result = UpdateRoleDto.safeParse(request);
 				expect(result.success).toBe(false);
 			}
 		});
@@ -380,7 +382,7 @@ describe('updateRoleDtoSchema', () => {
 				scopes: ['project:read', 'invalid-scope', 'workflow:execute'],
 			};
 
-			const result = updateRoleDtoSchema.safeParse(request);
+			const result = UpdateRoleDto.safeParse(request);
 			expect(result.success).toBe(false);
 			expect(result.error?.issues[0].path).toEqual(['scopes', 1]);
 		});
@@ -398,12 +400,12 @@ describe('updateRoleDtoSchema', () => {
 				{
 					displayName: 'Complete Update',
 					description: 'Full update description',
-					scopes: ['*'],
+					scopes: ['project:read'],
 				},
 			];
 
 			for (const request of validCombinations) {
-				const result = updateRoleDtoSchema.safeParse(request);
+				const result = UpdateRoleDto.safeParse(request);
 				expect(result.success).toBe(true);
 			}
 		});
@@ -412,10 +414,10 @@ describe('updateRoleDtoSchema', () => {
 			const request = {
 				displayName: 'AB', // minimum length
 				description: 'D'.repeat(500), // maximum length
-				scopes: ['*'], // global wildcard
+				scopes: ['project:read'],
 			};
 
-			const result = updateRoleDtoSchema.safeParse(request);
+			const result = UpdateRoleDto.safeParse(request);
 			expect(result.success).toBe(true);
 		});
 	});
@@ -450,7 +452,7 @@ describe('updateRoleDtoSchema', () => {
 				request: { scopes: undefined },
 			},
 		])('should handle $name correctly', ({ request, expectedErrorPath }) => {
-			const result = updateRoleDtoSchema.safeParse(request);
+			const result = UpdateRoleDto.safeParse(request);
 
 			if (expectedErrorPath) {
 				expect(result.success).toBe(false);
